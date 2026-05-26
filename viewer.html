@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LFTS Clip Viewer</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2f3d;
+      --text: #e8eaef;
+      --muted: #9aa3b5;
+      --accent: #6c9eff;
+      --accent-dim: #3d5a99;
+      --seq: #4ade80;
+      --non: #fbbf24;
+      --highlight: #fef08a33;
+      --active: #fef08a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { margin: 0 0 0.25rem; font-size: 1.35rem; font-weight: 600; }
+    header p { margin: 0; color: var(--muted); font-size: 0.875rem; }
+    .banner {
+      margin: 1rem 1.5rem 0;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      background: #2a2210;
+      border: 1px solid #5c4a1a;
+      color: #fde68a;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .banner.show { display: block; }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      min-width: 140px;
+    }
+    .stat strong { display: block; font-size: 1.4rem; color: var(--accent); }
+    .stat span { font-size: 0.8rem; color: var(--muted); }
+    nav.tabs {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0 1.5rem 1rem;
+    }
+    nav.tabs button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    nav.tabs button.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    main { padding: 0 1.5rem 2rem; max-width: 1100px; }
+    section.panel { display: none; }
+    section.panel.active { display: block; }
+    .clip-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+    .clip-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .clip-header h2 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+      flex: 1 1 280px;
+    }
+    .badges { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .badge {
+      font-size: 0.72rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      background: #252936;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .badge.score { color: var(--seq); border-color: #166534; background: #052e16; }
+    .panel[data-type="non"] .badge.score { color: var(--non); border-color: #854d0e; background: #422006; }
+    .clip-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    @media (max-width: 860px) {
+      .clip-body { grid-template-columns: 1fr; }
+    }
+    .video-col {
+      padding: 1rem;
+      border-right: 1px solid var(--border);
+      background: #000;
+    }
+    @media (max-width: 860px) {
+      .video-col { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+    video {
+      width: 100%;
+      max-height: 320px;
+      background: #000;
+      border-radius: 6px;
+    }
+    .time-label {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .segment-chapters {
+      margin-top: 0.75rem;
+      list-style: none;
+      padding: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+    }
+    .segment-chapters li {
+      margin-bottom: 0.35rem;
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .segment-chapters li:hover { border-color: var(--border); background: #252936; }
+    .segment-chapters li.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: #1e2a44;
+    }
+    .segment-chapters li time {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--accent);
+      margin-bottom: 0.15rem;
+    }
+    .play-short-btn {
+      margin-top: 0.5rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: var(--accent-dim);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.85rem;
+      width: 100%;
+    }
+    .play-short-btn:hover { filter: brightness(1.1); }
+    .playback-status {
+      margin-top: 0.4rem;
+      font-size: 0.78rem;
+      color: var(--non);
+      font-variant-numeric: tabular-nums;
+    }
+    .transcript-col {
+      padding: 1rem 1.25rem;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+    .transcript-col h3 {
+      margin: 0 0 0.75rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .sentence {
+      margin-bottom: 0.6rem;
+      padding: 0.35rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      border-left: 3px solid transparent;
+    }
+    .sentence.in-range {
+      background: var(--highlight);
+      border-left-color: var(--accent-dim);
+    }
+    .sentence.active {
+      border-left-color: var(--active);
+      background: #fef08a22;
+    }
+    .sentence time {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-bottom: 0.15rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .meta-block {
+      padding: 0 1.25rem 1rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+    .meta-block strong { color: var(--text); }
+    .short-card .clip-body { border-top: 1px solid var(--border); }
+    .loading, .error {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+    .error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LFTS Clip Viewer</h1>
+    <p>Sequential &amp; non-sequential shorts from <code>result.json</code> · transcript from <code>transcript.json</code> · video <code>input.mp4</code></p>
+  </header>
+
+  <div id="banner" class="banner">
+    Open this page via a local server (file:// blocks JSON/video fetch):
+    <code>python3 -m http.server 8080</code> then visit
+    <code>http://localhost:8080/viewer.html</code>
+  </div>
+
+  <div id="stats" class="stats" hidden></div>
+  <nav class="tabs" hidden id="tabs">
+    <button type="button" data-tab="seq" class="active">Sequential</button>
+    <button type="button" data-tab="non">Non-sequential</button>
+  </nav>
+
+  <main>
+    <div id="loading" class="loading">Loading result.json and transcript.json…</div>
+    <div id="error" class="error" hidden></div>
+    <section id="panel-seq" class="panel active" data-type="seq"></section>
+    <section id="panel-non" class="panel" data-type="non"></section>
+  </main>
+
+  <script>
+    const VIDEO_SRC = "input.mp4";
+    const RESULT_SRC = "result.json";
+    const TRANSCRIPT_SRC = "transcript.json";
+
+    let sentences = [];
+
+    function formatTime(sec) {
+      const s = Math.max(0, Number(sec) || 0);
+      const m = Math.floor(s / 60);
+      const r = (s % 60).toFixed(1).padStart(4, "0");
+      return `${m}:${r}`;
+    }
+
+    function buildSentences(transcriptionData) {
+      const items = transcriptionData.items || [];
+      const out = [];
+      let words = [];
+      let start = null;
+      let end = null;
+
+      for (const item of items) {
+        const t = item.type;
+        if (t === "pronunciation") {
+          const word = item.alternatives[0].content;
+          const st = parseFloat(item.start_time || 0);
+          const en = parseFloat(item.end_time || 0);
+          if (start === null) start = st;
+          end = en;
+          words.push(word);
+        } else if (t === "punctuation") {
+          const punct = item.alternatives[0].content;
+          if (words.length) words[words.length - 1] += punct;
+          if (".?!".includes(punct) && words.length && start !== null) {
+            out.push({
+              index: out.length + 1,
+              start: Math.round(start * 100) / 100,
+              end: Math.round(end * 100) / 100,
+              text: words.join(" "),
+            });
+            words = [];
+            start = null;
+            end = null;
+          }
+        }
+      }
+      if (words.length && start !== null) {
+        out.push({
+          index: out.length + 1,
+          start: Math.round(start * 100) / 100,
+          end: Math.round(end * 100) / 100,
+          text: words.join(" "),
+        });
+      }
+      return out;
+    }
+
+    function sentencesInRange(start, end) {
+      return sentences.filter((s) => s.end >= start && s.start <= end);
+    }
+
+    function renderTranscript(container, rangeStart, rangeEnd, videoEl) {
+      const inRange = sentencesInRange(rangeStart, rangeEnd);
+      const h3 = document.createElement("h3");
+      h3.textContent = "Transcript (clip range)";
+      container.appendChild(h3);
+
+      if (!inRange.length) {
+        const p = document.createElement("p");
+        p.style.color = "var(--muted)";
+        p.textContent = "No transcript sentences in this time range.";
+        container.appendChild(p);
+        return;
+      }
+
+      const els = [];
+      for (const s of inRange) {
+        const div = document.createElement("div");
+        div.className = "sentence in-range";
+        div.dataset.start = s.start;
+        div.dataset.end = s.end;
+        div.innerHTML = `<time>${formatTime(s.start)} – ${formatTime(s.end)}</time>${escapeHtml(s.text)}`;
+        container.appendChild(div);
+        els.push(div);
+      }
+
+      if (videoEl) {
+        videoEl.addEventListener("timeupdate", () => {
+          const t = videoEl.currentTime;
+          for (const el of els) {
+            const st = parseFloat(el.dataset.start);
+            const en = parseFloat(el.dataset.end);
+            el.classList.toggle("active", t >= st - 0.05 && t <= en + 0.15);
+          }
+        });
+      }
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function videoFragment(start, end) {
+      return `${VIDEO_SRC}#t=${start},${end}`;
+    }
+
+    function shortTotalDuration(segments) {
+      return segments.reduce((sum, s) => sum + (s.end - s.start), 0);
+    }
+
+    function segmentIndexAtTime(segments, t) {
+      for (let i = 0; i < segments.length; i++) {
+        if (t >= segments[i].start && t < segments[i].end - 0.02) return i;
+      }
+      return -1;
+    }
+
+    /** One video element; plays cuts in order, skipping gaps between segments. */
+    function attachMultiSegmentPlayer(video, segments, ui) {
+      let segIdx = 0;
+      let playThrough = false;
+
+      function updateUi() {
+        if (!segments.length) return;
+        const seg = segments[segIdx];
+        ui.status.textContent = `Now: segment ${segIdx + 1}/${segments.length} · ${formatTime(seg.start)}–${formatTime(seg.end)}`;
+        ui.chapterItems.forEach((li, j) => li.classList.toggle("active", j === segIdx));
+      }
+
+      function goToSegment(i, autoplay) {
+        if (i < 0 || i >= segments.length) return false;
+        segIdx = i;
+        video.currentTime = segments[i].start + 0.01;
+        updateUi();
+        if (autoplay) video.play().catch(() => {});
+        return true;
+      }
+
+      function jumpToNextSegment() {
+        if (segIdx + 1 >= segments.length) {
+          playThrough = false;
+          video.pause();
+          ui.status.textContent = `Finished · ${segments.length} segments played`;
+          return;
+        }
+        goToSegment(segIdx + 1, true);
+      }
+
+      video.addEventListener("loadedmetadata", () => {
+        if (segments.length) video.currentTime = segments[0].start;
+      });
+
+      video.addEventListener("timeupdate", () => {
+        if (!segments.length) return;
+        const t = video.currentTime;
+        let idx = segmentIndexAtTime(segments, t);
+
+        if (playThrough) {
+          if (idx < 0) {
+            const next = segments.find((s) => s.start > t + 0.02);
+            if (next) {
+              segIdx = segments.indexOf(next);
+              video.currentTime = next.start + 0.01;
+            } else {
+              playThrough = false;
+              video.pause();
+            }
+            updateUi();
+            ui.onTime?.(video.currentTime);
+            return;
+          }
+          segIdx = idx;
+          if (t >= segments[segIdx].end - 0.12) {
+            jumpToNextSegment();
+            ui.onTime?.(video.currentTime);
+            return;
+          }
+        } else if (idx >= 0) {
+          segIdx = idx;
+        }
+
+        updateUi();
+        ui.onTime?.(t);
+      });
+
+      video.addEventListener("play", () => {
+        if (!segments.length) return;
+        const idx = segmentIndexAtTime(segments, video.currentTime);
+        if (idx < 0) goToSegment(0, false);
+        else if (video.currentTime >= segments[idx].end - 0.1) goToSegment(idx, false);
+        else segIdx = idx;
+        updateUi();
+      });
+
+      video.addEventListener("seeked", () => {
+        const idx = segmentIndexAtTime(segments, video.currentTime);
+        if (idx >= 0) segIdx = idx;
+        updateUi();
+      });
+
+      ui.playBtn.addEventListener("click", () => {
+        playThrough = true;
+        goToSegment(0, true);
+      });
+
+      ui.chapterItems.forEach((li, i) => {
+        li.addEventListener("click", () => {
+          playThrough = true;
+          goToSegment(i, true);
+        });
+      });
+
+      updateUi();
+    }
+
+    function renderSequential(clips, container) {
+      clips.forEach((clip, i) => {
+        const start = clip.video_start_time;
+        const end = clip.video_end_time;
+        const card = document.createElement("article");
+        card.className = "clip-card";
+        card.innerHTML = `
+          <div class="clip-header">
+            <h2>${i + 1}. ${escapeHtml(clip.title || "Untitled")}</h2>
+            <div class="badges">
+              <span class="badge">${escapeHtml(clip.debug_id || "")}</span>
+              <span class="badge score">${clip.confidence_score ?? "—"} score</span>
+              <span class="badge">${escapeHtml(clip.category || "")}</span>
+              ${(clip.social_media || []).map((s) => `<span class="badge">${escapeHtml(s)}</span>`).join("")}
+            </div>
+          </div>
+          <div class="clip-body">
+            <div class="video-col"></div>
+            <div class="transcript-col"></div>
+          </div>
+          <div class="meta-block"><strong>Clip text:</strong> ${escapeHtml(clip.text || "")}</div>
+        `;
+
+        const video = document.createElement("video");
+        video.controls = true;
+        video.preload = "metadata";
+        video.src = videoFragment(start, end);
+        card.querySelector(".video-col").appendChild(video);
+
+        const label = document.createElement("div");
+        label.className = "time-label";
+        label.textContent = `${formatTime(start)} → ${formatTime(end)} (${(end - start).toFixed(1)}s)`;
+        card.querySelector(".video-col").appendChild(label);
+
+        renderTranscript(card.querySelector(".transcript-col"), start, end, video);
+        container.appendChild(card);
+      });
+    }
+
+    function renderNonSequential(shorts, container) {
+      shorts.forEach((short, i) => {
+        const segments = (short.clips || []).map((c) => ({
+          start: c.startTime,
+          end: c.endTime,
+          text: c.text || "",
+        }));
+        const rangeStart = segments[0]?.start ?? 0;
+        const rangeEnd = segments[segments.length - 1]?.end ?? 0;
+        const totalDur = short.total_duration || shortTotalDuration(segments);
+
+        const card = document.createElement("article");
+        card.className = "clip-card short-card";
+        card.innerHTML = `
+          <div class="clip-header">
+            <h2>${i + 1}. ${escapeHtml(short.title || "Untitled")}</h2>
+            <div class="badges">
+              <span class="badge">${escapeHtml(short.short_id || short.debug_id || "")}</span>
+              <span class="badge score">${short.confidence_score ?? "—"} score</span>
+              <span class="badge">${segments.length} cuts · ${totalDur.toFixed(1)}s playable</span>
+              <span class="badge">${escapeHtml(short.category || "")}</span>
+              ${(short.social_media || []).map((s) => `<span class="badge">${escapeHtml(s)}</span>`).join("")}
+            </div>
+          </div>
+          <div class="clip-body">
+            <div class="video-col"></div>
+            <div class="transcript-col"></div>
+          </div>
+        `;
+
+        const videoCol = card.querySelector(".video-col");
+        const video = document.createElement("video");
+        video.controls = true;
+        video.preload = "metadata";
+        video.src = VIDEO_SRC;
+        videoCol.appendChild(video);
+
+        const timeLabel = document.createElement("div");
+        timeLabel.className = "time-label";
+        timeLabel.textContent = `Source span ${formatTime(rangeStart)} → ${formatTime(rangeEnd)} (${segments.length} segments, gaps skipped)`;
+        videoCol.appendChild(timeLabel);
+
+        const playBtn = document.createElement("button");
+        playBtn.type = "button";
+        playBtn.className = "play-short-btn";
+        playBtn.textContent = "▶ Play full short (all segments)";
+        videoCol.appendChild(playBtn);
+
+        const status = document.createElement("div");
+        status.className = "playback-status";
+        videoCol.appendChild(status);
+
+        const chapters = document.createElement("ol");
+        chapters.className = "segment-chapters";
+        const chapterItems = [];
+        segments.forEach((seg, j) => {
+          const li = document.createElement("li");
+          li.innerHTML = `<time>${formatTime(seg.start)} – ${formatTime(seg.end)}</time>${escapeHtml(seg.text)}`;
+          chapters.appendChild(li);
+          chapterItems.push(li);
+        });
+        videoCol.appendChild(chapters);
+
+        const transcriptCol = card.querySelector(".transcript-col");
+        renderTranscript(transcriptCol, rangeStart, rangeEnd, video);
+
+        attachMultiSegmentPlayer(video, segments, {
+          playBtn,
+          status,
+          chapterItems,
+          onTime: (t) => {
+            transcriptCol.querySelectorAll(".sentence").forEach((el) => {
+              const st = parseFloat(el.dataset.start);
+              const en = parseFloat(el.dataset.end);
+              el.classList.toggle("active", t >= st - 0.05 && t <= en + 0.15);
+            });
+          },
+        });
+
+        const combinedText = segments.map((s) => s.text).join(" ");
+        const meta = document.createElement("div");
+        meta.className = "meta-block";
+        meta.innerHTML = `<strong>Full short text:</strong> ${escapeHtml(combinedText)}`;
+        card.appendChild(meta);
+
+        if (short.reason) {
+          const reason = document.createElement("div");
+          reason.className = "meta-block";
+          reason.innerHTML = `<strong>Reason:</strong> ${escapeHtml(short.reason)}`;
+          card.appendChild(reason);
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    function renderStats(result) {
+      const el = document.getElementById("stats");
+      el.hidden = false;
+      el.innerHTML = `
+        <div class="stat"><strong>${result.sequential_clips?.length ?? 0}</strong><span>Sequential clips</span></div>
+        <div class="stat"><strong>${result.non_sequential_shorts?.length ?? 0}</strong><span>Non-sequential shorts</span></div>
+        <div class="stat"><strong>${formatTime(result.video_duration || 0)}</strong><span>Source duration</span></div>
+        <div class="stat"><strong>${result.sentence_count ?? sentences.length}</strong><span>Sentences</span></div>
+      `;
+    }
+
+    async function init() {
+      const loading = document.getElementById("loading");
+      const errEl = document.getElementById("error");
+
+      if (location.protocol === "file:") {
+        document.getElementById("banner").classList.add("show");
+      }
+
+      try {
+        const [resultRes, transcriptRes] = await Promise.all([
+          fetch(RESULT_SRC),
+          fetch(TRANSCRIPT_SRC),
+        ]);
+        if (!resultRes.ok) throw new Error(`Failed to load ${RESULT_SRC} (${resultRes.status})`);
+        if (!transcriptRes.ok) throw new Error(`Failed to load ${TRANSCRIPT_SRC} (${transcriptRes.status})`);
+
+        const result = await resultRes.json();
+        const transcriptRaw = await transcriptRes.json();
+        const transcriptionData = transcriptRaw.results || transcriptRaw;
+        sentences = buildSentences(transcriptionData);
+
+        loading.hidden = true;
+        document.getElementById("tabs").hidden = false;
+        renderStats(result);
+
+        renderSequential(result.sequential_clips || [], document.getElementById("panel-seq"));
+        renderNonSequential(result.non_sequential_shorts || [], document.getElementById("panel-non"));
+
+        document.querySelectorAll("nav.tabs button").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.remove("active"));
+            document.querySelectorAll("section.panel").forEach((p) => p.classList.remove("active"));
+            btn.classList.add("active");
+            document.getElementById(`panel-${btn.dataset.tab}`).classList.add("active");
+          });
+        });
+      } catch (e) {
+        loading.hidden = true;
+        errEl.hidden = false;
+        errEl.textContent = String(e.message || e);
+        document.getElementById("banner").classList.add("show");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
